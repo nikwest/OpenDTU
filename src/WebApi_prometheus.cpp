@@ -10,7 +10,7 @@ void WebApiPrometheusClass::init(AsyncWebServer* server)
 
     _server = server;
 
-    _server->on("/api/prometheus/metrics", HTTP_GET, std::bind(&WebApiPrometheusClass::onPrometheusMetricsGet, this, _1));
+    _server->on("/metrics", HTTP_GET, std::bind(&WebApiPrometheusClass::onPrometheusMetricsGet, this, _1));
 }
 
 void WebApiPrometheusClass::loop()
