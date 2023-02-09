@@ -3,10 +3,10 @@
  * Copyright (C) 2022 Thomas Basler and others
  */
 #include "WebApi_sysstatus.h"
-#include "ArduinoJson.h"
-#include "AsyncJson.h"
 #include "Configuration.h"
 #include "NetworkSettings.h"
+#include "WebApi.h"
+#include <AsyncJson.h>
 #include <Hoymiles.h>
 #include <LittleFS.h>
 #include <ResetReason.h>
@@ -30,6 +30,10 @@ void WebApiSysstatusClass::loop()
 
 void WebApiSysstatusClass::onSystemStatus(AsyncWebServerRequest* request)
 {
+    if (!WebApi.checkCredentialsReadonly(request)) {
+        return;
+    }
+
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
 

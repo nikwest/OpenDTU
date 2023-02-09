@@ -2,18 +2,18 @@
 /*
  * Copyright (C) 2022 Thomas Basler and others
  */
-#include "MqttHassPublishing.h"
-#include "MqttPublishing.h"
+#include "MqttHandleHass.h"
+#include "MqttHandleInverter.h"
 #include "MqttSettings.h"
 #include "NetworkSettings.h"
 
-MqttHassPublishingClass MqttHassPublishing;
+MqttHandleHassClass MqttHandleHass;
 
-void MqttHassPublishingClass::init()
+void MqttHandleHassClass::init()
 {
 }
 
-void MqttHassPublishingClass::loop()
+void MqttHandleHassClass::loop()
 {
     if (_updateForced) {
         publishConfig();
@@ -30,12 +30,12 @@ void MqttHassPublishingClass::loop()
     }
 }
 
-void MqttHassPublishingClass::forceUpdate()
+void MqttHandleHassClass::forceUpdate()
 {
     _updateForced = true;
 }
 
-void MqttHassPublishingClass::publishConfig()
+void MqttHandleHassClass::publishConfig()
 {
     if (!Configuration.get().Mqtt_Hass_Enabled) {
         return;
@@ -79,7 +79,7 @@ void MqttHassPublishingClass::publishConfig()
     }
 }
 
-void MqttHassPublishingClass::publishField(std::shared_ptr<InverterAbstract> inv, uint8_t channel, byteAssign_fieldDeviceClass_t fieldType, bool clear)
+void MqttHandleHassClass::publishField(std::shared_ptr<InverterAbstract> inv, uint8_t channel, byteAssign_fieldDeviceClass_t fieldType, bool clear)
 {
     if (!inv->Statistics()->hasChannelFieldValue(channel, fieldType.fieldId)) {
         return;
@@ -99,7 +99,7 @@ void MqttHassPublishingClass::publishField(std::shared_ptr<InverterAbstract> inv
         + "/config";
 
     if (!clear) {
-        String stateTopic = MqttSettings.getPrefix() + MqttPublishing.getTopic(inv, channel, fieldType.fieldId);
+        String stateTopic = MqttSettings.getPrefix() + MqttHandleInverter.getTopic(inv, channel, fieldType.fieldId);
         const char* devCls = deviceClasses[fieldType.deviceClsId];
         const char* stateCls = stateClasses[fieldType.stateClsId];
 
@@ -113,14 +113,18 @@ void MqttHassPublishingClass::publishField(std::shared_ptr<InverterAbstract> inv
         DynamicJsonDocument root(1024);
         root[F("name")] = name;
         root[F("stat_t")] = stateTopic;
-        root[F("unit_of_meas")] = inv->Statistics()->getChannelFieldUnit(channel, fieldType.fieldId);
         root[F("uniq_id")] = serial + "_ch" + String(channel) + "_" + fieldName;
+
+        String unit_of_meausure = inv->Statistics()->getChannelFieldUnit(channel, fieldType.fieldId);
+        if (unit_of_meausure != "") {
+            root[F("unit_of_meas")] = unit_of_meausure;
+        }
 
         JsonObject deviceObj = root.createNestedObject("dev");
         createDeviceInfo(deviceObj, inv);
 
         if (Configuration.get().Mqtt_Hass_Expire) {
-            root[F("exp_aft")] = Hoymiles.getNumInverters() * Configuration.get().Mqtt_PublishInterval * 2;
+            root[F("exp_aft")] = Hoymiles.getNumInverters() * Configuration.get().Mqtt_PublishInterval * 3;
         }
         if (devCls != 0) {
             root[F("dev_cla")] = devCls;
@@ -131,13 +135,13 @@ void MqttHassPublishingClass::publishField(std::shared_ptr<InverterAbstract> inv
 
         char buffer[512];
         serializeJson(root, buffer);
-        MqttSettings.publishHass(configTopic, buffer);
+        publish(configTopic, buffer);
     } else {
-        MqttSettings.publishHass(configTopic, "");
+        publish(configTopic, "");
     }
 }
 
-void MqttHassPublishingClass::publishInverterButton(std::shared_ptr<InverterAbstract> inv, const char* caption, const char* icon, const char* category, const char* deviceClass, const char* subTopic, const char* payload)
+void MqttHandleHassClass::publishInverterButton(std::shared_ptr<InverterAbstract> inv, const char* caption, const char* icon, const char* category, const char* deviceClass, const char* subTopic, const char* payload)
 {
     String serial = inv->serialString();
 
@@ -169,10 +173,10 @@ void MqttHassPublishingClass::publishInverterButton(std::shared_ptr<InverterAbst
 
     char buffer[512];
     serializeJson(root, buffer);
-    MqttSettings.publishHass(configTopic, buffer);
+    publish(configTopic, buffer);
 }
 
-void MqttHassPublishingClass::publishInverterNumber(
+void MqttHandleHassClass::publishInverterNumber(
     std::shared_ptr<InverterAbstract> inv, const char* caption, const char* icon, const char* category,
     const char* commandTopic, const char* stateTopic, const char* unitOfMeasure,
     int16_t min, int16_t max)
@@ -208,10 +212,10 @@ void MqttHassPublishingClass::publishInverterNumber(
 
     char buffer[512];
     serializeJson(root, buffer);
-    MqttSettings.publishHass(configTopic, buffer);
+    publish(configTopic, buffer);
 }
 
-void MqttHassPublishingClass::publishInverterBinarySensor(std::shared_ptr<InverterAbstract> inv, const char* caption, const char* subTopic, const char* payload_on, const char* payload_off)
+void MqttHandleHassClass::publishInverterBinarySensor(std::shared_ptr<InverterAbstract> inv, const char* caption, const char* subTopic, const char* payload_on, const char* payload_off)
 {
     String serial = inv->serialString();
 
@@ -237,15 +241,22 @@ void MqttHassPublishingClass::publishInverterBinarySensor(std::shared_ptr<Invert
 
     char buffer[512];
     serializeJson(root, buffer);
-    MqttSettings.publishHass(configTopic, buffer);
+    publish(configTopic, buffer);
 }
 
-void MqttHassPublishingClass::createDeviceInfo(JsonObject& object, std::shared_ptr<InverterAbstract> inv)
+void MqttHandleHassClass::createDeviceInfo(JsonObject& object, std::shared_ptr<InverterAbstract> inv)
 {
     object[F("name")] = inv->name();
     object[F("ids")] = inv->serialString();
-    object[F("cu")] = String(F("http://")) + WiFi.localIP().toString();
+    object[F("cu")] = String(F("http://")) + NetworkSettings.localIP().toString();
     object[F("mf")] = F("OpenDTU");
     object[F("mdl")] = inv->typeName();
     object[F("sw")] = AUTO_GIT_HASH;
+}
+
+void MqttHandleHassClass::publish(const String& subtopic, const String& payload)
+{
+    String topic = Configuration.get().Mqtt_Hass_Topic;
+    topic += subtopic;
+    MqttSettings.publishGeneric(topic.c_str(), payload.c_str(), Configuration.get().Mqtt_Hass_Retain);
 }

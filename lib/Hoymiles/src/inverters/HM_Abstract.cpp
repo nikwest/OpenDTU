@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Copyright (C) 2022 Thomas Basler and others
+ */
 #include "HM_Abstract.h"
 #include "HoymilesRadio.h"
 #include "commands/ActivePowerControlCommand.h"
@@ -14,7 +18,7 @@ HM_Abstract::HM_Abstract(uint64_t serial)
 bool HM_Abstract::sendStatsRequest(HoymilesRadio* radio)
 {
     struct tm timeinfo;
-    if (!getLocalTime(&timeinfo, 0)) {
+    if (!getLocalTime(&timeinfo, 5)) {
         return false;
     }
 
@@ -31,7 +35,7 @@ bool HM_Abstract::sendStatsRequest(HoymilesRadio* radio)
 bool HM_Abstract::sendAlarmLogRequest(HoymilesRadio* radio, bool force)
 {
     struct tm timeinfo;
-    if (!getLocalTime(&timeinfo, 0)) {
+    if (!getLocalTime(&timeinfo, 5)) {
         return false;
     }
 
@@ -59,7 +63,7 @@ bool HM_Abstract::sendAlarmLogRequest(HoymilesRadio* radio, bool force)
 bool HM_Abstract::sendDevInfoRequest(HoymilesRadio* radio)
 {
     struct tm timeinfo;
-    if (!getLocalTime(&timeinfo, 0)) {
+    if (!getLocalTime(&timeinfo, 5)) {
         return false;
     }
 
@@ -80,7 +84,7 @@ bool HM_Abstract::sendDevInfoRequest(HoymilesRadio* radio)
 bool HM_Abstract::sendSystemConfigParaRequest(HoymilesRadio* radio)
 {
     struct tm timeinfo;
-    if (!getLocalTime(&timeinfo, 0)) {
+    if (!getLocalTime(&timeinfo, 5)) {
         return false;
     }
 

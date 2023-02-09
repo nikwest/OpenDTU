@@ -1,3 +1,4 @@
 export interface SecurityConfig {
-    password: string
+    password: string;
+    allow_readonly: boolean;
 }

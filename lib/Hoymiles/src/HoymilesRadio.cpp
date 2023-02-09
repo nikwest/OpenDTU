@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Copyright (C) 2022 Thomas Basler and others
+ */
 #include "HoymilesRadio.h"
 #include "Hoymiles.h"
 #include "commands/RequestFrameCommand.h"
@@ -5,15 +9,14 @@
 #include <Every.h>
 #include <FunctionalInterrupt.h>
 
-void HoymilesRadio::init()
+void HoymilesRadio::init(SPIClass* initialisedSpiBus, uint8_t pinCE, uint8_t pinIRQ)
 {
     _dtuSerial.u64 = 0;
 
-    _hspi.reset(new SPIClass(HSPI));
-    _radio.reset(new RF24(HOYMILES_PIN_CE, HOYMILES_PIN_CS));
+    _spiPtr.reset(initialisedSpiBus);
+    _radio.reset(new RF24(pinCE, initialisedSpiBus->pinSS()));
 
-    _hspi->begin(HOYMILES_PIN_SCLK, HOYMILES_PIN_MISO, HOYMILES_PIN_MOSI, HOYMILES_PIN_CS);
-    _radio->begin(_hspi.get());
+    _radio->begin(_spiPtr.get());
 
     _radio->setDataRate(RF24_250KBPS);
     _radio->enableDynamicPayloads();
@@ -22,12 +25,12 @@ void HoymilesRadio::init()
     _radio->setRetries(0, 0);
     _radio->maskIRQ(true, true, false); // enable only receiving interrupts
     if (_radio->isChipConnected()) {
-        Serial.println(F("Connection successfull"));
+        Hoymiles.getMessageOutput()->println(F("Connection successfull"));
     } else {
-        Serial.println(F("Connection error!!"));
+        Hoymiles.getMessageOutput()->println(F("Connection error!!"));
     }
 
-    attachInterrupt(digitalPinToInterrupt(HOYMILES_PIN_IRQ), std::bind(&HoymilesRadio::handleIntr, this), FALLING);
+    attachInterrupt(digitalPinToInterrupt(pinIRQ), std::bind(&HoymilesRadio::handleIntr, this), FALLING);
 
     openReadingPipe();
     _radio->startListening();
@@ -41,21 +44,19 @@ void HoymilesRadio::loop()
     }
 
     if (_packetReceived) {
-        Serial.println(F("Interrupt received"));
+        Hoymiles.getMessageOutput()->println(F("Interrupt received"));
         while (_radio->available()) {
-            if (!_rxBuffer.full()) {
-                fragment_t* f;
-                f = _rxBuffer.getFront();
-                memset(f->fragment, 0xcc, MAX_RF_PAYLOAD_SIZE);
-                f->len = _radio->getDynamicPayloadSize();
-                f->channel = _radio->getChannel();
-                if (f->len > MAX_RF_PAYLOAD_SIZE)
-                    f->len = MAX_RF_PAYLOAD_SIZE;
-
-                _radio->read(f->fragment, f->len);
-                _rxBuffer.pushFront(f);
+            if (!(_rxBuffer.size() > FRAGMENT_BUFFER_SIZE)) {
+                fragment_t f;
+                memset(f.fragment, 0xcc, MAX_RF_PAYLOAD_SIZE);
+                f.len = _radio->getDynamicPayloadSize();
+                f.channel = _radio->getChannel();
+                if (f.len > MAX_RF_PAYLOAD_SIZE)
+                    f.len = MAX_RF_PAYLOAD_SIZE;
+                _radio->read(f.fragment, f.len);
+                _rxBuffer.push(f);
             } else {
-                Serial.println(F("Buffer full"));
+                Hoymiles.getMessageOutput()->println(F("Buffer full"));
                 _radio->flush_rx();
             }
         }
@@ -64,70 +65,70 @@ void HoymilesRadio::loop()
     } else {
         // Perform package parsing only if no packages are received
         if (!_rxBuffer.empty()) {
-            fragment_t* f = _rxBuffer.getBack();
-            if (checkFragmentCrc(f)) {
-                std::shared_ptr<InverterAbstract> inv = Hoymiles.getInverterByFragment(f);
+            fragment_t f = _rxBuffer.back();
+            if (checkFragmentCrc(&f)) {
+                std::shared_ptr<InverterAbstract> inv = Hoymiles.getInverterByFragment(&f);
 
                 if (nullptr != inv) {
                     // Save packet in inverter rx buffer
                     char buf[30];
-                    snprintf(buf, sizeof(buf), "RX Channel: %d --> ", f->channel);
-                    dumpBuf(buf, f->fragment, f->len);
-                    inv->addRxFragment(f->fragment, f->len);
+                    snprintf(buf, sizeof(buf), "RX Channel: %d --> ", f.channel);
+                    dumpBuf(buf, f.fragment, f.len);
+                    inv->addRxFragment(f.fragment, f.len);
                 } else {
-                    Serial.println(F("Inverter Not found!"));
+                    Hoymiles.getMessageOutput()->println(F("Inverter Not found!"));
                 }
 
             } else {
-                Serial.println(F("Frame kaputt"));
+                Hoymiles.getMessageOutput()->println(F("Frame kaputt"));
             }
 
             // Remove paket from buffer even it was corrupted
-            _rxBuffer.popBack();
+            _rxBuffer.pop();
         }
     }
 
     if (_busyFlag && _rxTimeout.occured()) {
-        Serial.println(F("RX Period End"));
+        Hoymiles.getMessageOutput()->println(F("RX Period End"));
         std::shared_ptr<InverterAbstract> inv = Hoymiles.getInverterBySerial(_commandQueue.front().get()->getTargetAddress());
 
         if (nullptr != inv) {
             CommandAbstract* cmd = _commandQueue.front().get();
             uint8_t verifyResult = inv->verifyAllFragments(cmd);
             if (verifyResult == FRAGMENT_ALL_MISSING_RESEND) {
-                Serial.println(F("Nothing received, resend whole request"));
+                Hoymiles.getMessageOutput()->println(F("Nothing received, resend whole request"));
                 sendLastPacketAgain();
 
             } else if (verifyResult == FRAGMENT_ALL_MISSING_TIMEOUT) {
-                Serial.println(F("Nothing received, resend count exeeded"));
+                Hoymiles.getMessageOutput()->println(F("Nothing received, resend count exeeded"));
                 _commandQueue.pop();
                 _busyFlag = false;
 
             } else if (verifyResult == FRAGMENT_RETRANSMIT_TIMEOUT) {
-                Serial.println(F("Retransmit timeout"));
+                Hoymiles.getMessageOutput()->println(F("Retransmit timeout"));
                 _commandQueue.pop();
                 _busyFlag = false;
 
             } else if (verifyResult == FRAGMENT_HANDLE_ERROR) {
-                Serial.println(F("Packet handling error"));
+                Hoymiles.getMessageOutput()->println(F("Packet handling error"));
                 _commandQueue.pop();
                 _busyFlag = false;
 
             } else if (verifyResult > 0) {
                 // Perform Retransmit
-                Serial.print(F("Request retransmit: "));
-                Serial.println(verifyResult);
+                Hoymiles.getMessageOutput()->print(F("Request retransmit: "));
+                Hoymiles.getMessageOutput()->println(verifyResult);
                 sendRetransmitPacket(verifyResult);
 
             } else {
                 // Successfull received all packages
-                Serial.println(F("Success"));
+                Hoymiles.getMessageOutput()->println(F("Success"));
                 _commandQueue.pop();
                 _busyFlag = false;
             }
         } else {
             // If inverter was not found, assume the command is invalid
-            Serial.println(F("RX: Invalid inverter found"));
+            Hoymiles.getMessageOutput()->println(F("RX: Invalid inverter found"));
             _commandQueue.pop();
             _busyFlag = false;
         }
@@ -141,7 +142,7 @@ void HoymilesRadio::loop()
                 inv->clearRxFragmentBuffer();
                 sendEsbPacket(cmd);
             } else {
-                Serial.println(F("TX: Invalid inverter found"));
+                Hoymiles.getMessageOutput()->println(F("TX: Invalid inverter found"));
                 _commandQueue.pop();
             }
         }
@@ -251,12 +252,12 @@ void HoymilesRadio::sendEsbPacket(CommandAbstract* cmd)
     openWritingPipe(s);
     _radio->setRetries(3, 15);
 
-    Serial.print(F("TX "));
-    Serial.print(cmd->getCommandName());
-    Serial.print(F(" Channel: "));
-    Serial.print(_radio->getChannel());
-    Serial.print(F(" --> "));
-    cmd->dumpDataPayload(Serial);
+    Hoymiles.getMessageOutput()->print(F("TX "));
+    Hoymiles.getMessageOutput()->print(cmd->getCommandName());
+    Hoymiles.getMessageOutput()->print(F(" Channel: "));
+    Hoymiles.getMessageOutput()->print(_radio->getChannel());
+    Hoymiles.getMessageOutput()->print(F(" --> "));
+    cmd->dumpDataPayload(Hoymiles.getMessageOutput());
     _radio->write(cmd->getDataPayload(), cmd->getDataSize());
 
     _radio->setRetries(0, 0);
@@ -288,10 +289,10 @@ void HoymilesRadio::dumpBuf(const char* info, uint8_t buf[], uint8_t len)
 {
 
     if (NULL != info)
-        Serial.print(String(info));
+        Hoymiles.getMessageOutput()->print(String(info));
 
     for (uint8_t i = 0; i < len; i++) {
-        Serial.printf("%02X ", buf[i]);
+        Hoymiles.getMessageOutput()->printf("%02X ", buf[i]);
     }
-    Serial.println(F(""));
+    Hoymiles.getMessageOutput()->println(F(""));
 }

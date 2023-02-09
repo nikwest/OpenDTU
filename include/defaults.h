@@ -10,6 +10,7 @@
 #define ACCESS_POINT_NAME "OpenDTU-"
 #define ACCESS_POINT_PASSWORD "openDTU42"
 #define AUTH_USERNAME "admin"
+#define SECURITY_ALLOW_READONLY true
 
 #define ADMIN_TIMEOUT 180
 #define WIFI_RECONNECT_TIMEOUT 15
@@ -77,3 +78,10 @@
 #define MQTT_HASS_RETAIN true
 #define MQTT_HASS_TOPIC "homeassistant/"
 #define MQTT_HASS_INDIVIDUALPANELS false
+
+#define DEV_PINMAPPING ""
+
+#define DISPLAY_POWERSAFE true
+#define DISPLAY_SCREENSAVER true
+#define DISPLAY_SHOWLOGO true
+#define DISPLAY_CONTRAST 60

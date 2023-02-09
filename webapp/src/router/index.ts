@@ -1,19 +1,22 @@
+import AboutView from '@/views/AboutView.vue';
+import ConfigAdminView from '@/views/ConfigAdminView.vue';
+import ConsoleInfoView from '@/views/ConsoleInfoView.vue';
+import DeviceAdminView from '@/views/DeviceAdminView.vue'
+import DtuAdminView from '@/views/DtuAdminView.vue';
+import FirmwareUpgradeView from '@/views/FirmwareUpgradeView.vue';
+import HomeView from '@/views/HomeView.vue';
+import InverterAdminView from '@/views/InverterAdminView.vue';
+import LoginView from '@/views/LoginView.vue';
+import MaintenanceRebootView from '@/views/MaintenanceRebootView.vue';
+import MqttAdminView from '@/views/MqttAdminView.vue';
+import MqttInfoView from '@/views/MqttInfoView.vue';
+import NetworkAdminView from '@/views/NetworkAdminView.vue';
+import NetworkInfoView from '@/views/NetworkInfoView.vue';
+import NtpAdminView from '@/views/NtpAdminView.vue';
+import NtpInfoView from '@/views/NtpInfoView.vue';
+import SecurityAdminView from '@/views/SecurityAdminView.vue';
+import SystemInfoView from '@/views/SystemInfoView.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-import HomeView from '@/views/HomeView.vue'
-import AboutView from '@/views/AboutView.vue'
-import NetworkInfoView from '@/views/NetworkInfoView.vue'
-import SystemInfoView from '@/views/SystemInfoView.vue'
-import NtpInfoView from '@/views/NtpInfoView.vue'
-import NetworkAdminView from '@/views/NetworkAdminView.vue'
-import NtpAdminView from '@/views/NtpAdminView.vue'
-import MqttAdminView from '@/views/MqttAdminView.vue'
-import MqttInfoView from '@/views/MqttInfoView.vue'
-import InverterAdminView from '@/views/InverterAdminView.vue'
-import DtuAdminView from '@/views/DtuAdminView.vue'
-import FirmwareUpgradeView from '@/views/FirmwareUpgradeView.vue'
-import ConfigAdminView from '@/views/ConfigAdminView.vue'
-import SecurityAdminView from '@/views/SecurityAdminView.vue'
-import LoginView from '@/views/LoginView.vue'
 
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
@@ -55,6 +58,11 @@ const router = createRouter({
         component: MqttInfoView
     },
     {
+        path: '/info/console',
+        name: 'Web Console',
+        component: ConsoleInfoView
+    },
+    {
         path: '/settings/network',
         name: 'Network Settings',
         component: NetworkAdminView
@@ -80,6 +88,11 @@ const router = createRouter({
         component: DtuAdminView
     },
     {
+        path: '/settings/device',
+        name: 'Device Manager',
+        component: DeviceAdminView
+    },
+    {
         path: '/firmware/upgrade',
         name: 'Firmware Upgrade',
         component: FirmwareUpgradeView
@@ -93,24 +106,13 @@ const router = createRouter({
         path: '/settings/security',
         name: 'Security',
         component: SecurityAdminView
+    },
+    {
+        path: '/maintenance/reboot',
+        name: 'Device Reboot',
+        component: MaintenanceRebootView
     }
 ]
-});
-
-router.beforeEach((to, from, next) => {
-    // redirect to login page if not logged in and trying to access a restricted page
-    const publicPages = ['/', '/login', '/about', '/info/network', '/info/system', '/info/ntp', '/info/mqtt', ];
-    const authRequired = !publicPages.includes(to.path);
-    const loggedIn = localStorage.getItem('user');
-
-    if (authRequired && !loggedIn) {
-        return next({
-            path: '/login',
-            query: { returnUrl: to.path }
-        });
-    }
-
-    next();
 });
 
 export default router;

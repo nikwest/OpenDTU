@@ -1,5 +1,6 @@
 <template>
-    <BasePage :title="'Live Data'" :isLoading="dataLoading" :isWideScreen="true">
+    <BasePage :title="$t('home.LiveData')" :isLoading="dataLoading" :isWideScreen="true">
+        <HintView :hints="liveData.hints" />
         <InverterTotalInfo :totalData="liveData.total" /><br />
         <div class="row gy-3">
             <div class="col-sm-3 col-md-2" :style="[inverterData.length == 1 ? { 'display': 'none' } : {}]">
@@ -36,22 +37,25 @@
                                         {{ inverter.name }}
                                     </div>
                                     <div style="padding-right: 2em;">
-                                        Serial Number: {{ inverter.serial }}
+                                        {{ $t('home.SerialNumber') }}{{ inverter.serial }}
                                     </div>
                                     <div style="padding-right: 2em;">
-                                        Current Limit: <template v-if="inverter.limit_absolute > -1"> {{
-                                                formatNumber(inverter.limit_absolute, 0)
-                                        }} W | </template>{{ formatNumber(inverter.limit_relative, 0) }} %
+                                        {{ $t('home.CurrentLimit') }}<template v-if="inverter.limit_absolute > -1"> {{
+                                                $n(inverter.limit_absolute, 'decimalNoDigits')
+                                        }} W | </template>{{ $n(inverter.limit_relative / 100, 'percent') }}
                                     </div>
                                     <div style="padding-right: 2em;">
-                                        Data Age: {{ inverter.data_age }} seconds
+                                        {{ $t('home.DataAge') }} {{ $t('home.Seconds', {'val': $n(inverter.data_age) }) }}
+                                        <template v-if="inverter.data_age > 300">
+                                            / {{ calculateAbsoluteTime(inverter.data_age) }}
+                                        </template>
                                     </div>
                                 </div>
                             </div>
                             <div class="btn-toolbar p-2" role="toolbar">
                                 <div class="btn-group me-2" role="group">
                                     <button :disabled="!isLogged" type="button" class="btn btn-sm btn-danger"
-                                        @click="onShowLimitSettings(inverter.serial)" title="Show / Set Inverter Limit">
+                                        @click="onShowLimitSettings(inverter.serial)" v-tooltip :title="$t('home.ShowSetInverterLimit')">
                                         <BIconSpeedometer style="font-size:24px;" />
 
                                     </button>
@@ -59,7 +63,7 @@
 
                                 <div class="btn-group me-2" role="group">
                                     <button :disabled="!isLogged" type="button" class="btn btn-sm btn-danger"
-                                        @click="onShowPowerSettings(inverter.serial)" title="Turn Inverter on/off">
+                                        @click="onShowPowerSettings(inverter.serial)" v-tooltip :title="$t('home.TurnOnOff')">
                                         <BIconPower style="font-size:24px;" />
 
                                     </button>
@@ -67,7 +71,7 @@
 
                                 <div class="btn-group me-2" role="group">
                                     <button type="button" class="btn btn-sm btn-info"
-                                        @click="onShowDevInfo(inverter.serial)" title="Show Inverter Info">
+                                        @click="onShowDevInfo(inverter.serial)" v-tooltip :title="$t('home.ShowInverterInfo')">
                                         <BIconCpu style="font-size:24px;" />
 
                                     </button>
@@ -76,12 +80,12 @@
                                 <div class="btn-group" role="group">
                                     <button v-if="inverter.events >= 0" type="button"
                                         class="btn btn-sm btn-secondary position-relative"
-                                        @click="onShowEventlog(inverter.serial)" title="Show Eventlog">
+                                        @click="onShowEventlog(inverter.serial)" v-tooltip :title="$t('home.ShowEventlog')">
                                         <BIconJournalText style="font-size:24px;" />
                                         <span
                                             class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger">
                                             {{ inverter.events }}
-                                            <span class="visually-hidden">unread messages</span>
+                                            <span class="visually-hidden">{{ $t('home.UnreadMessages') }}</span>
                                         </span>
                                     </button>
                                 </div>
@@ -107,13 +111,13 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Event Log</h5>
+                    <h5 class="modal-title">{{ $t('home.EventLog') }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="text-center" v-if="eventLogLoading">
                         <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">{{ $t('home.Loading') }}</span>
                         </div>
                     </div>
 
@@ -122,7 +126,7 @@
 
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @click="onHideEventlog"
-                        data-bs-dismiss="modal">Close</button>
+                        data-bs-dismiss="modal">{{ $t('home.Close') }}</button>
                 </div>
 
             </div>
@@ -133,13 +137,13 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Inverter Info</h5>
+                    <h5 class="modal-title">{{ $t('home.InverterInfo') }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="text-center" v-if="devInfoLoading">
                         <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">{{ $t('home.Loading') }}</span>
                         </div>
                     </div>
 
@@ -148,7 +152,7 @@
 
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @click="onHideDevInfo"
-                        data-bs-dismiss="modal">Close</button>
+                        data-bs-dismiss="modal">{{ $t('home.Close') }}</button>
                 </div>
             </div>
         </div>
@@ -159,7 +163,7 @@
             <div class="modal-content">
                 <form @submit="onSubmitLimit">
                     <div class="modal-header">
-                        <h5 class="modal-title">Limit Settings</h5>
+                        <h5 class="modal-title">{{ $t('home.LimitSettings') }}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -169,15 +173,14 @@
                         </BootstrapAlert>
                         <div class="text-center" v-if="limitSettingLoading">
                             <div class="spinner-border" role="status">
-                                <span class="visually-hidden">Loading...</span>
+                                <span class="visually-hidden">{{ $t('home.Loading') }}</span>
                             </div>
                         </div>
 
                         <template v-if="!limitSettingLoading">
 
                             <div class="row mb-3">
-                                <label for="inputCurrentLimit" class="col-sm-3 col-form-label">Current
-                                    Limit:</label>
+                                <label for="inputCurrentLimit" class="col-sm-3 col-form-label">{{ $t('home.CurrentLimit') }} </label>
                                 <div class="col-sm-4">
                                     <div class="input-group">
                                         <input type="text" class="form-control" id="inputCurrentLimit"
@@ -198,8 +201,9 @@
                             </div>
 
                             <div class="row mb-3 align-items-center">
-                                <label for="inputLastLimitSet" class="col-sm-3 col-form-label">Last Limit Set
-                                    Status:</label>
+                                <label for="inputLastLimitSet" class="col-sm-3 col-form-label">
+                                    {{ $t('home.LastLimitSetStatus') }}
+                                </label>
                                 <div class="col-sm-9">
                                     <span class="badge" :class="{
                                         'text-bg-danger': currentLimitList.limit_set_status == 'Failure',
@@ -207,13 +211,13 @@
                                         'text-bg-success': currentLimitList.limit_set_status == 'Ok',
                                         'text-bg-secondary': currentLimitList.limit_set_status == 'Unknown',
                                     }">
-                                        {{ currentLimitList.limit_set_status }}
+                                        {{ $t('home.' + currentLimitList.limit_set_status) }}
                                     </span>
                                 </div>
                             </div>
 
                             <div class="row mb-3">
-                                <label for="inputTargetLimit" class="col-sm-3 col-form-label">Set Limit:</label>
+                                <label for="inputTargetLimit" class="col-sm-3 col-form-label">{{ $t('home.SetLimit') }}</label>
                                 <div class="col-sm-9">
                                     <div class="input-group">
                                         <input type="number" name="inputTargetLimit" class="form-control"
@@ -223,16 +227,11 @@
                                             data-bs-toggle="dropdown" aria-expanded="false">{{ targetLimitTypeText
                                             }}</button>
                                         <ul class="dropdown-menu dropdown-menu-end">
-                                            <li><a class="dropdown-item" @click="onSelectType(1)" href="#">Relative
-                                                    (%)</a></li>
-                                            <li><a class="dropdown-item" @click="onSelectType(0)" href="#">Absolute
-                                                    (W)</a></li>
+                                            <li><a class="dropdown-item" @click="onSelectType(1)" href="#">{{ $t('home.Relative') }}</a></li>
+                                            <li><a class="dropdown-item" @click="onSelectType(0)" href="#">{{ $t('home.Absolute') }}</a></li>
                                         </ul>
                                     </div>
-                                    <div v-if="targetLimitType == 0" class="alert alert-secondary mt-3" role="alert">
-                                        <b>Hint:</b> If you set the limit as absolute value the display of the
-                                        current value will only be updated after ~4 minutes.
-                                    </div>
+                                    <div v-if="targetLimitType == 0" class="alert alert-secondary mt-3" role="alert" v-html="$t('home.LimitHint')"></div>
                                 </div>
                             </div>
                         </template>
@@ -240,13 +239,11 @@
                     </div>
 
                     <div class="modal-footer">
-                        <button type="submit" class="btn btn-danger" @click="onSetLimitSettings(true)">Set Limit
-                            Persistent</button>
+                        <button type="submit" class="btn btn-danger" @click="onSetLimitSettings(true)">{{ $t('home.SetPersistent') }}</button>
 
-                        <button type="submit" class="btn btn-danger" @click="onSetLimitSettings(false)">Set Limit
-                            Non-Persistent</button>
+                        <button type="submit" class="btn btn-danger" @click="onSetLimitSettings(false)">{{ $t('home.SetNonPersistent') }}</button>
 
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ $t('home.Close') }}</button>
                     </div>
                 </form>
             </div>
@@ -257,7 +254,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Power Settings</h5>
+                    <h5 class="modal-title">{{ $t('home.PowerSettings') }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -267,14 +264,13 @@
                     </BootstrapAlert>
                     <div class="text-center" v-if="powerSettingLoading">
                         <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
+                            <span class="visually-hidden">{{ $t('home.Loading') }}</span>
                         </div>
                     </div>
 
                     <template v-if="!powerSettingLoading">
                         <div class="row mb-3 align-items-center">
-                            <label for="inputLastPowerSet" class="col col-form-label">Last Power Set
-                                Status:</label>
+                            <label for="inputLastPowerSet" class="col col-form-label">{{ $t('home.LastPowerSetStatus') }}</label>
                             <div class="col">
                                 <span class="badge" :class="{
                                     'text-bg-danger': successCommandPower == 'Failure',
@@ -282,20 +278,20 @@
                                     'text-bg-success': successCommandPower == 'Ok',
                                     'text-bg-secondary': successCommandPower == 'Unknown',
                                 }">
-                                    {{ successCommandPower }}
+                                    {{ $t('home.' + successCommandPower) }}
                                 </span>
                             </div>
                         </div>
 
                         <div class="d-grid gap-2 col-6 mx-auto">
                             <button type="button" class="btn btn-success" @click="onSetPowerSettings(true)">
-                                <BIconToggleOn class="fs-4" />&nbsp;Turn On
+                                <BIconToggleOn class="fs-4" />&nbsp;{{ $t('home.TurnOn') }}
                             </button>
                             <button type="button" class="btn btn-danger" @click="onSetPowerSettings(false)">
-                                <BIconToggleOff class="fs-4" />&nbsp;Turn Off
+                                <BIconToggleOff class="fs-4" />&nbsp;{{ $t('home.TurnOff') }}
                             </button>
                             <button type="button" class="btn btn-warning" @click="onSetPowerSettings(true, true)">
-                                <BIconArrowCounterclockwise class="fs-4" />&nbsp;Restart
+                                <BIconArrowCounterclockwise class="fs-4" />&nbsp;{{ $t('home.Restart') }}
                             </button>
                         </div>
                     </template>
@@ -303,7 +299,7 @@
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ $t('home.Close') }}</button>
                 </div>
             </div>
         </div>
@@ -312,52 +308,53 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
 import BasePage from '@/components/BasePage.vue';
-import * as bootstrap from 'bootstrap';
-import {
-    BIconXCircleFill,
-    BIconExclamationCircleFill,
-    BIconCheckCircleFill,
-    BIconSpeedometer,
-    BIconPower,
-    BIconCpu,
-    BIconJournalText,
-    BIconToggleOn,
-    BIconToggleOff,
-    BIconArrowCounterclockwise
-} from 'bootstrap-icons-vue';
-import EventLog from '@/components/EventLog.vue';
-import DevInfo from '@/components/DevInfo.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
+import DevInfo from '@/components/DevInfo.vue';
+import EventLog from '@/components/EventLog.vue';
+import HintView from '@/components/HintView.vue';
 import InverterChannelInfo from "@/components/InverterChannelInfo.vue";
 import InverterTotalInfo from '@/components/InverterTotalInfo.vue';
 import type { DevInfoStatus } from '@/types/DevInfoStatus';
 import type { EventlogItems } from '@/types/EventlogStatus';
-import type { LiveData, Inverter } from '@/types/LiveDataStatus';
-import type { LimitStatus } from '@/types/LimitStatus';
 import type { LimitConfig } from '@/types/LimitConfig';
-import { isLoggedIn, handleResponse, authHeader } from '@/utils/authentication';
-import { formatNumber } from '@/utils';
+import type { LimitStatus } from '@/types/LimitStatus';
+import type { Inverter, LiveData } from '@/types/LiveDataStatus';
+import { authHeader, authUrl, handleResponse, isLoggedIn } from '@/utils/authentication';
+import * as bootstrap from 'bootstrap';
+import {
+    BIconArrowCounterclockwise,
+    BIconCheckCircleFill,
+    BIconCpu,
+    BIconExclamationCircleFill,
+    BIconJournalText,
+    BIconPower,
+    BIconSpeedometer,
+    BIconToggleOff,
+    BIconToggleOn,
+    BIconXCircleFill
+} from 'bootstrap-icons-vue';
+import { defineComponent } from 'vue';
 
 export default defineComponent({
     components: {
         BasePage,
+        BootstrapAlert,
+        DevInfo,
+        EventLog,
+        HintView,
         InverterChannelInfo,
         InverterTotalInfo,
-        EventLog,
-        DevInfo,
-        BootstrapAlert,
-        BIconXCircleFill,
-        BIconExclamationCircleFill,
-        BIconCheckCircleFill,
-        BIconSpeedometer,
-        BIconPower,
-        BIconCpu,
-        BIconJournalText,
-        BIconToggleOn,
-        BIconToggleOff,
         BIconArrowCounterclockwise,
+        BIconCheckCircleFill,
+        BIconCpu,
+        BIconExclamationCircleFill,
+        BIconJournalText,
+        BIconPower,
+        BIconSpeedometer,
+        BIconToggleOff,
+        BIconToggleOn,
+        BIconXCircleFill,
     },
     data() {
         return {
@@ -384,7 +381,7 @@ export default defineComponent({
 
             targetLimitMin: 2,
             targetLimitMax: 100,
-            targetLimitTypeText: "Relative (%)",
+            targetLimitTypeText: this.$t('home.Relative'),
             targetLimitType: 1,
             targetLimitPersistent: false,
 
@@ -441,24 +438,25 @@ export default defineComponent({
     computed: {
         currentLimitAbsolute(): string {
             if (this.currentLimitList.max_power > 0) {
-                return formatNumber(this.currentLimitList.limit_relative * this.currentLimitList.max_power / 100, 2);
+                return this.$n(this.currentLimitList.limit_relative * this.currentLimitList.max_power / 100,
+                    'decimalTwoDigits');
             }
             return "0";
         },
         currentLimitRelative(): string {
-            return formatNumber(this.currentLimitList.limit_relative, 2);
+            return this.$n(this.currentLimitList.limit_relative,
+                'decimalTwoDigits');
         },
         inverterData(): Inverter[] {
             return this.liveData.inverters;
         }
     },
     methods: {
-        formatNumber,
         isLoggedIn,
         getInitialData() {
             this.dataLoading = true;
-            fetch("/api/livedata/status")
-                .then((response) => response.json())
+            fetch("/api/livedata/status", { headers: authHeader() })
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data) => {
                     this.liveData = data;
                     this.dataLoading = false;
@@ -468,8 +466,9 @@ export default defineComponent({
             console.log("Starting connection to WebSocket Server");
 
             const { protocol, host } = location;
+            const authString = authUrl();
             const webSocketUrl = `${protocol === "https:" ? "wss" : "ws"
-                }://${host}/livedata`;
+                }://${authString}${host}/livedata`;
 
             this.socket = new WebSocket(webSocketUrl);
 
@@ -492,9 +491,11 @@ export default defineComponent({
         },
         initDataAgeing() {
             this.dataAgeInterval = setInterval(() => {
-                this.inverterData.forEach(element => {
-                    element.data_age++;
-                });
+                if (this.inverterData) {
+                    this.inverterData.forEach(element => {
+                        element.data_age++;
+                    });
+                }
             }, 1000);
         },
         // Send heartbeat packets regularly * 59s Send a heartbeat
@@ -520,8 +521,8 @@ export default defineComponent({
         },
         onShowEventlog(serial: number) {
             this.eventLogLoading = true;
-            fetch("/api/eventlog/status?inv=" + serial)
-                .then((response) => response.json())
+            fetch("/api/eventlog/status?inv=" + serial, { headers: authHeader() })
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data) => {
                     this.eventLogList = data[serial];
                     this.eventLogLoading = false;
@@ -534,8 +535,8 @@ export default defineComponent({
         },
         onShowDevInfo(serial: number) {
             this.devInfoLoading = true;
-            fetch("/api/devinfo/status")
-                .then((response) => response.json())
+            fetch("/api/devinfo/status", { headers: authHeader() })
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data) => {
                     this.devInfoList = data[serial][0];
                     this.devInfoLoading = false;
@@ -550,11 +551,11 @@ export default defineComponent({
             this.targetLimitList.serial = 0;
             this.targetLimitList.limit_value = 0;
             this.targetLimitType = 1;
-            this.targetLimitTypeText = "Relative (%)";
+            this.targetLimitTypeText = this.$t('home.Relative');
 
             this.limitSettingLoading = true;
-            fetch("/api/limit/status")
-                .then((response) => response.json())
+            fetch("/api/limit/status", { headers: authHeader() })
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data) => {
                     this.currentLimitList = data[serial];
                     this.targetLimitList.serial = serial;
@@ -577,13 +578,13 @@ export default defineComponent({
                 headers: authHeader(),
                 body: formData,
             })
-                .then((response) => handleResponse(response, this.$emitter))
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then(
                     (response) => {
                         if (response.type == "success") {
                             this.limitSettingView.hide();
                         } else {
-                            this.alertMessageLimit = response.message;
+                            this.alertMessageLimit = this.$t('apiresponse.' + response.code, response.param);
                             this.alertTypeLimit = response.type;
                             this.showAlertLimit = true;
                         }
@@ -595,11 +596,11 @@ export default defineComponent({
         },
         onSelectType(type: number) {
             if (type == 1) {
-                this.targetLimitTypeText = "Relative (%)";
+                this.targetLimitTypeText = this.$t('home.Relative');
                 this.targetLimitMin = 2;
                 this.targetLimitMax = 100;
             } else {
-                this.targetLimitTypeText = "Absolute (W)";
+                this.targetLimitTypeText = this.$t('home.Absolute');
                 this.targetLimitMin = 10;
                 this.targetLimitMax = (this.currentLimitList.max_power > 0 ? this.currentLimitList.max_power : 1500);
             }
@@ -608,8 +609,8 @@ export default defineComponent({
 
         onShowPowerSettings(serial: number) {
             this.powerSettingLoading = true;
-            fetch("/api/power/status")
-                .then((response) => response.json())
+            fetch("/api/power/status", { headers: authHeader() })
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data) => {
                     this.successCommandPower = data[serial].power_set_status;
                     this.powerSettingSerial = serial;
@@ -647,19 +648,23 @@ export default defineComponent({
                 headers: authHeader(),
                 body: formData,
             })
-                .then((response) => handleResponse(response, this.$emitter))
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then(
                     (response) => {
                         if (response.type == "success") {
                             this.powerSettingView.hide();
                         } else {
-                            this.alertMessagePower = response.message;
+                            this.alertMessagePower = this.$t('apiresponse.' + response.code, response.param);
                             this.alertTypePower = response.type;
                             this.showAlertPower = true;
                         }
                     }
                 )
         },
+        calculateAbsoluteTime(lastTime: number): string {
+            const date = new Date(Date.now() - lastTime * 1000);
+            return this.$d(date, 'datetime');
+        }
     },
 });
 </script>

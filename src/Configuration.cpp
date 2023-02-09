@@ -3,6 +3,7 @@
  * Copyright (C) 2022 Thomas Basler and others
  */
 #include "Configuration.h"
+#include "MessageOutput.h"
 #include "defaults.h"
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -12,59 +13,11 @@ CONFIG_T config;
 void ConfigurationClass::init()
 {
     memset(&config, 0x0, sizeof(config));
-    config.Cfg_SaveCount = 0;
-    config.Cfg_Version = CONFIG_VERSION;
-
-    // WiFi Settings
-    strlcpy(config.WiFi_Ssid, WIFI_SSID, sizeof(config.WiFi_Ssid));
-    strlcpy(config.WiFi_Password, WIFI_PASSWORD, sizeof(config.WiFi_Password));
-    config.WiFi_Dhcp = WIFI_DHCP;
-    strlcpy(config.WiFi_Hostname, APP_HOSTNAME, sizeof(config.WiFi_Hostname));
-
-    // NTP Settings
-    strlcpy(config.Ntp_Server, NTP_SERVER, sizeof(config.Ntp_Server));
-    strlcpy(config.Ntp_Timezone, NTP_TIMEZONE, sizeof(config.Ntp_Timezone));
-    strlcpy(config.Ntp_TimezoneDescr, NTP_TIMEZONEDESCR, sizeof(config.Ntp_TimezoneDescr));
-
-    // MqTT Settings
-    config.Mqtt_Enabled = MQTT_ENABLED;
-    strlcpy(config.Mqtt_Hostname, MQTT_HOST, sizeof(config.Mqtt_Hostname));
-    config.Mqtt_Port = MQTT_PORT;
-    strlcpy(config.Mqtt_Username, MQTT_USER, sizeof(config.Mqtt_Username));
-    strlcpy(config.Mqtt_Password, MQTT_PASSWORD, sizeof(config.Mqtt_Password));
-    strlcpy(config.Mqtt_Topic, MQTT_TOPIC, sizeof(config.Mqtt_Topic));
-    config.Mqtt_Retain = MQTT_RETAIN;
-    config.Mqtt_Tls = MQTT_TLS;
-    strlcpy(config.Mqtt_RootCaCert, MQTT_ROOT_CA_CERT, sizeof(config.Mqtt_RootCaCert));
-    strlcpy(config.Mqtt_LwtTopic, MQTT_LWT_TOPIC, sizeof(config.Mqtt_LwtTopic));
-    strlcpy(config.Mqtt_LwtValue_Online, MQTT_LWT_ONLINE, sizeof(config.Mqtt_LwtValue_Online));
-    strlcpy(config.Mqtt_LwtValue_Offline, MQTT_LWT_OFFLINE, sizeof(config.Mqtt_LwtValue_Offline));
-    config.Mqtt_PublishInterval = MQTT_PUBLISH_INTERVAL;
-
-    for (uint8_t i = 0; i < INV_MAX_COUNT; i++) {
-        config.Inverter[i].Serial = 0;
-        strlcpy(config.Inverter[i].Name, "", 0);
-        for (uint8_t c = 0; c < INV_MAX_CHAN_COUNT; c++) {
-            config.Inverter[0].MaxChannelPower[c] = 0;
-        }
-    }
-
-    config.Dtu_Serial = DTU_SERIAL;
-    config.Dtu_PollInterval = DTU_POLL_INTERVAL;
-    config.Dtu_PaLevel = DTU_PA_LEVEL;
-
-    config.Mqtt_Hass_Enabled = MQTT_HASS_ENABLED;
-    config.Mqtt_Hass_Expire = MQTT_HASS_EXPIRE;
-    config.Mqtt_Hass_Retain = MQTT_HASS_RETAIN;
-    strlcpy(config.Mqtt_Hass_Topic, MQTT_HASS_TOPIC, sizeof(config.Mqtt_Hass_Topic));
-    config.Mqtt_Hass_IndividualPanels = MQTT_HASS_INDIVIDUALPANELS;
-
-    strlcpy(config.Security_Password, ACCESS_POINT_PASSWORD, sizeof(config.Security_Password));
 }
 
 bool ConfigurationClass::write()
 {
-    File f = LittleFS.open(CONFIG_FILENAME_JSON, "w");
+    File f = LittleFS.open(CONFIG_FILENAME, "w");
     if (!f) {
         return false;
     }
@@ -125,6 +78,16 @@ bool ConfigurationClass::write()
 
     JsonObject security = doc.createNestedObject("security");
     security["password"] = config.Security_Password;
+    security["allow_readonly"] = config.Security_AllowReadonly;
+
+    JsonObject device = doc.createNestedObject("device");
+    device["pinmapping"] = config.Dev_PinMapping;
+
+    JsonObject display = device.createNestedObject("display");
+    display["powersafe"] = config.Display_PowerSafe;
+    display["screensaver"] = config.Display_ScreenSaver;
+    display["showlogo"] = config.Display_ShowLogo;
+    display["contrast"] = config.Display_Contrast;
 
     JsonArray inverters = doc.createNestedArray("inverters");
     for (uint8_t i = 0; i < INV_MAX_COUNT; i++) {
@@ -132,15 +95,17 @@ bool ConfigurationClass::write()
         inv["serial"] = config.Inverter[i].Serial;
         inv["name"] = config.Inverter[i].Name;
 
-        JsonArray channels = inv.createNestedArray("channels");
+        JsonArray channel = inv.createNestedArray("channel");
         for (uint8_t c = 0; c < INV_MAX_CHAN_COUNT; c++) {
-            channels.add(config.Inverter[i].MaxChannelPower[c]);
+            JsonObject chanData = channel.createNestedObject();
+            chanData["name"] = config.Inverter[i].channel[c].Name;
+            chanData["max_power"] = config.Inverter[i].channel[c].MaxChannelPower;
         }
     }
 
     // Serialize JSON to file
     if (serializeJson(doc, f) == 0) {
-        Serial.println("Failed to write file");
+        MessageOutput.println("Failed to write file");
         return false;
     }
 
@@ -150,36 +115,13 @@ bool ConfigurationClass::write()
 
 bool ConfigurationClass::read()
 {
-    if (!LittleFS.exists(CONFIG_FILENAME_JSON)) {
-        Serial.println("Converting binary config to json... ");
-        File f = LittleFS.open(CONFIG_FILENAME, "r");
-        if (!f) {
-            return false;
-        }
-        uint8_t* bytes = reinterpret_cast<uint8_t*>(&config);
-        for (unsigned int i = 0; i < sizeof(CONFIG_T); i++) {
-            bytes[i] = f.read();
-        }
-        f.close();
-        write();
-        Serial.println("done");
-        LittleFS.remove(CONFIG_FILENAME);
-    }
-    return readJson();
-}
-
-bool ConfigurationClass::readJson()
-{
-    File f = LittleFS.open(CONFIG_FILENAME_JSON, "r", false);
-    if (!f) {
-        return false;
-    }
+    File f = LittleFS.open(CONFIG_FILENAME, "r", false);
 
     DynamicJsonDocument doc(JSON_BUFFER_SIZE);
     // Deserialize the JSON document
     DeserializationError error = deserializeJson(doc, f);
     if (error) {
-        Serial.println(F("Failed to read file, using default configuration"));
+        MessageOutput.println(F("Failed to read file, using default configuration"));
     }
 
     JsonObject cfg = doc["cfg"];
@@ -266,6 +208,16 @@ bool ConfigurationClass::readJson()
 
     JsonObject security = doc["security"];
     strlcpy(config.Security_Password, security["password"] | ACCESS_POINT_PASSWORD, sizeof(config.Security_Password));
+    config.Security_AllowReadonly = security["allow_readonly"] | SECURITY_ALLOW_READONLY;
+
+    JsonObject device = doc["device"];
+    strlcpy(config.Dev_PinMapping, device["pinmapping"] | DEV_PINMAPPING, sizeof(config.Dev_PinMapping));
+
+    JsonObject display = device["display"];
+    config.Display_PowerSafe = display["powersafe"] | DISPLAY_POWERSAFE;
+    config.Display_ScreenSaver = display["screensaver"] | DISPLAY_SCREENSAVER;
+    config.Display_ShowLogo = display["showlogo"] | DISPLAY_SHOWLOGO;
+    config.Display_Contrast = display["contrast"] | DISPLAY_CONTRAST;
 
     JsonArray inverters = doc["inverters"];
     for (uint8_t i = 0; i < INV_MAX_COUNT; i++) {
@@ -273,9 +225,10 @@ bool ConfigurationClass::readJson()
         config.Inverter[i].Serial = inv["serial"] | 0ULL;
         strlcpy(config.Inverter[i].Name, inv["name"] | "", sizeof(config.Inverter[i].Name));
 
-        JsonArray channels = inv["channels"];
+        JsonArray channel = inv["channel"];
         for (uint8_t c = 0; c < INV_MAX_CHAN_COUNT; c++) {
-            config.Inverter[i].MaxChannelPower[c] = channels[c];
+            config.Inverter[i].channel[c].MaxChannelPower = channel[c]["max_power"] | 0;
+            strlcpy(config.Inverter[i].channel[c].Name, channel[c]["name"] | "", sizeof(config.Inverter[i].channel[c].Name));
         }
     }
 
@@ -285,78 +238,35 @@ bool ConfigurationClass::readJson()
 
 void ConfigurationClass::migrate()
 {
-    if (config.Cfg_Version < 0x00010400) {
-        strlcpy(config.Ntp_Server, NTP_SERVER, sizeof(config.Ntp_Server));
-        strlcpy(config.Ntp_Timezone, NTP_TIMEZONE, sizeof(config.Ntp_Timezone));
-        strlcpy(config.Ntp_TimezoneDescr, NTP_TIMEZONEDESCR, sizeof(config.Ntp_TimezoneDescr));
-    }
-
-    if (config.Cfg_Version < 0x00010500) {
-        config.Mqtt_Enabled = MQTT_ENABLED;
-        strlcpy(config.Mqtt_Hostname, MQTT_HOST, sizeof(config.Mqtt_Hostname));
-        config.Mqtt_Port = MQTT_PORT;
-        strlcpy(config.Mqtt_Username, MQTT_USER, sizeof(config.Mqtt_Username));
-        strlcpy(config.Mqtt_Password, MQTT_PASSWORD, sizeof(config.Mqtt_Password));
-        strlcpy(config.Mqtt_Topic, MQTT_TOPIC, sizeof(config.Mqtt_Topic));
-    }
-
-    if (config.Cfg_Version < 0x00010600) {
-        config.Mqtt_Retain = MQTT_RETAIN;
-    }
-
-    if (config.Cfg_Version < 0x00010700) {
-        strlcpy(config.Mqtt_LwtTopic, MQTT_LWT_TOPIC, sizeof(config.Mqtt_LwtTopic));
-        strlcpy(config.Mqtt_LwtValue_Online, MQTT_LWT_ONLINE, sizeof(config.Mqtt_LwtValue_Online));
-        strlcpy(config.Mqtt_LwtValue_Offline, MQTT_LWT_OFFLINE, sizeof(config.Mqtt_LwtValue_Offline));
-    }
-
-    if (config.Cfg_Version < 0x00010800) {
-        for (uint8_t i = 0; i < INV_MAX_COUNT; i++) {
-            config.Inverter[i].Serial = 0;
-            strlcpy(config.Inverter[i].Name, "", 0);
+    if (config.Cfg_Version < 0x00011700) {
+        File f = LittleFS.open(CONFIG_FILENAME, "r", false);
+        if (!f) {
+            MessageOutput.println(F("Failed to open file, cancel migration"));
+            return;
         }
-    }
 
-    if (config.Cfg_Version < 0x00010900) {
-        config.Dtu_Serial = DTU_SERIAL;
-        config.Dtu_PollInterval = DTU_POLL_INTERVAL;
-        config.Dtu_PaLevel = DTU_PA_LEVEL;
-    }
+        DynamicJsonDocument doc(JSON_BUFFER_SIZE);
+        // Deserialize the JSON document
+        DeserializationError error = deserializeJson(doc, f);
+        if (error) {
+            MessageOutput.println(F("Failed to read file, cancel migration"));
+            return;
+        }
 
-    if (config.Cfg_Version < 0x00011000) {
-        config.Mqtt_PublishInterval = MQTT_PUBLISH_INTERVAL;
-    }
-
-    if (config.Cfg_Version < 0x00011100) {
-        init(); // Config will be completly incompatible after this update
-    }
-
-    if (config.Cfg_Version < 0x00011200) {
-        config.Mqtt_Hass_Enabled = MQTT_HASS_ENABLED;
-        config.Mqtt_Hass_Retain = MQTT_HASS_RETAIN;
-        strlcpy(config.Mqtt_Hass_Topic, MQTT_HASS_TOPIC, sizeof(config.Mqtt_Hass_Topic));
-        config.Mqtt_Hass_IndividualPanels = MQTT_HASS_INDIVIDUALPANELS;
-    }
-
-    if (config.Cfg_Version < 0x00011300) {
-        config.Mqtt_Tls = MQTT_TLS;
-        strlcpy(config.Mqtt_RootCaCert, MQTT_ROOT_CA_CERT, sizeof(config.Mqtt_RootCaCert));
-    }
-
-    if (config.Cfg_Version < 0x00011400) {
-        strlcpy(config.Mqtt_Hostname, config.Mqtt_Hostname_Short, sizeof(config.Mqtt_Hostname_Short));
-    }
-
-    if (config.Cfg_Version < 0x00011500) {
-        config.Mqtt_Hass_Expire = MQTT_HASS_EXPIRE;
-    }
-
-    if (config.Cfg_Version < 0x00011600) {
-        strlcpy(config.Security_Password, ACCESS_POINT_PASSWORD, sizeof(config.Security_Password));
+        JsonArray inverters = doc["inverters"];
+        for (uint8_t i = 0; i < INV_MAX_COUNT; i++) {
+            JsonObject inv = inverters[i].as<JsonObject>();
+            JsonArray channels = inv["channels"];
+            for (uint8_t c = 0; c < INV_MAX_CHAN_COUNT; c++) {
+                config.Inverter[i].channel[c].MaxChannelPower = channels[c];
+                strlcpy(config.Inverter[i].channel[c].Name, "", sizeof(config.Inverter[i].channel[c].Name));
+            }
+        }
     }
 
     config.Cfg_Version = CONFIG_VERSION;
     write();
+    read();
 }
 
 CONFIG_T& ConfigurationClass::get()
@@ -368,6 +278,17 @@ INVERTER_CONFIG_T* ConfigurationClass::getFreeInverterSlot()
 {
     for (uint8_t i = 0; i < INV_MAX_COUNT; i++) {
         if (config.Inverter[i].Serial == 0) {
+            return &config.Inverter[i];
+        }
+    }
+
+    return NULL;
+}
+
+INVERTER_CONFIG_T* ConfigurationClass::getInverterConfig(uint64_t serial)
+{
+    for (uint8_t i = 0; i < INV_MAX_COUNT; i++) {
+        if (config.Inverter[i].Serial == serial) {
             return &config.Inverter[i];
         }
     }

@@ -3,8 +3,11 @@
  * Copyright (C) 2022 Thomas Basler and others
  */
 #include "WebApi_ws_live.h"
-#include "AsyncJson.h"
 #include "Configuration.h"
+#include "MessageOutput.h"
+#include "WebApi.h"
+#include "defaults.h"
+#include <AsyncJson.h>
 
 WebApiWsLiveClass::WebApiWsLiveClass()
     : _ws("/livedata")
@@ -64,6 +67,13 @@ void WebApiWsLiveClass::loop()
         String buffer;
         if (buffer) {
             serializeJson(root, buffer);
+
+            if (Configuration.get().Security_AllowReadonly) {
+                _ws.setAuthentication("", "");
+            } else {
+                _ws.setAuthentication(AUTH_USERNAME, Configuration.get().Security_Password);
+            }
+
             _ws.textAll(buffer);
         }
 
@@ -102,6 +112,12 @@ void WebApiWsLiveClass::generateJsonResponse(JsonVariant& root)
 
         // Loop all channels
         for (uint8_t c = 0; c <= inv->Statistics()->getChannelCount(); c++) {
+            if (c > 0) {
+                INVERTER_CONFIG_T* inv_cfg = Configuration.getInverterConfig(inv->serial());
+                if (inv_cfg != nullptr) {
+                    invObject[String(c)][F("name")]["u"] = inv_cfg->channel[c - 1].Name;
+                }
+            }
             addField(invObject, i, inv, c, FLD_PAC);
             addField(invObject, i, inv, c, FLD_UAC);
             addField(invObject, i, inv, c, FLD_IAC);
@@ -119,7 +135,9 @@ void WebApiWsLiveClass::generateJsonResponse(JsonVariant& root)
             addField(invObject, i, inv, c, FLD_PF);
             addField(invObject, i, inv, c, FLD_PRA);
             addField(invObject, i, inv, c, FLD_EFF);
-            addField(invObject, i, inv, c, FLD_IRR);
+            if (c > 0 && inv->Statistics()->getChannelMaxPower(c - 1) > 0) {
+                addField(invObject, i, inv, c, FLD_IRR);
+            }
         }
 
         if (inv->Statistics()->hasChannelFieldValue(CH0, FLD_EVT_LOG)) {
@@ -142,6 +160,16 @@ void WebApiWsLiveClass::generateJsonResponse(JsonVariant& root)
     addTotalField(totalObj, "Power", totalPower, "W", 1);
     addTotalField(totalObj, "YieldDay", totalYieldDay, "Wh", 0);
     addTotalField(totalObj, "YieldTotal", totalYieldTotal, "kWh", 2);
+
+    JsonObject hintObj = root.createNestedObject("hints");
+    struct tm timeinfo;
+    hintObj[F("time_sync")] = !getLocalTime(&timeinfo, 5);
+    hintObj[F("radio_problem")] = (!Hoymiles.getRadio()->isConnected() || !Hoymiles.getRadio()->isPVariant());
+    if (!strcmp(Configuration.get().Security_Password, ACCESS_POINT_PASSWORD)) {
+        hintObj[F("default_password")] = true;
+    } else {
+        hintObj[F("default_password")] = false;
+    }
 }
 
 void WebApiWsLiveClass::addField(JsonObject& root, uint8_t idx, std::shared_ptr<InverterAbstract> inv, uint8_t channel, uint8_t fieldId, String topic)
@@ -171,16 +199,20 @@ void WebApiWsLiveClass::onWebsocketEvent(AsyncWebSocket* server, AsyncWebSocketC
     if (type == WS_EVT_CONNECT) {
         char str[64];
         snprintf(str, sizeof(str), "Websocket: [%s][%u] connect", server->url(), client->id());
-        Serial.println(str);
+        MessageOutput.println(str);
     } else if (type == WS_EVT_DISCONNECT) {
         char str[64];
         snprintf(str, sizeof(str), "Websocket: [%s][%u] disconnect", server->url(), client->id());
-        Serial.println(str);
+        MessageOutput.println(str);
     }
 }
 
 void WebApiWsLiveClass::onLivedataStatus(AsyncWebServerRequest* request)
 {
+    if (!WebApi.checkCredentialsReadonly(request)) {
+        return;
+    }
+
     AsyncJsonResponse* response = new AsyncJsonResponse(false, 40960U);
     JsonVariant root = response->getRoot();
 

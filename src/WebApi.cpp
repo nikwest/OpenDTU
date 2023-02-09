@@ -3,10 +3,9 @@
  * Copyright (C) 2022 Thomas Basler and others
  */
 #include "WebApi.h"
-#include "ArduinoJson.h"
-#include "AsyncJson.h"
 #include "Configuration.h"
 #include "defaults.h"
+#include <AsyncJson.h>
 
 WebApiClass::WebApiClass()
     : _server(HTTP_PORT)
@@ -19,12 +18,14 @@ void WebApiClass::init()
     _server.addHandler(&_events);
 
     _webApiConfig.init(&_server);
+    _webApiDevice.init(&_server);
     _webApiDevInfo.init(&_server);
     _webApiDtu.init(&_server);
     _webApiEventlog.init(&_server);
     _webApiFirmware.init(&_server);
     _webApiInverter.init(&_server);
     _webApiLimit.init(&_server);
+    _webApiMaintenance.init(&_server);
     _webApiMqtt.init(&_server);
     _webApiNetwork.init(&_server);
     _webApiNtp.init(&_server);
@@ -33,6 +34,7 @@ void WebApiClass::init()
     _webApiSecurity.init(&_server);
     _webApiSysstatus.init(&_server);
     _webApiWebapp.init(&_server);
+    _webApiWsConsole.init(&_server);
     _webApiWsLive.init(&_server);
 
     _server.begin();
@@ -41,12 +43,14 @@ void WebApiClass::init()
 void WebApiClass::loop()
 {
     _webApiConfig.loop();
+    _webApiDevice.loop();
     _webApiDevInfo.loop();
     _webApiDtu.loop();
     _webApiEventlog.loop();
     _webApiFirmware.loop();
     _webApiInverter.loop();
     _webApiLimit.loop();
+    _webApiMaintenance.loop();
     _webApiMqtt.loop();
     _webApiNetwork.loop();
     _webApiNtp.loop();
@@ -54,6 +58,7 @@ void WebApiClass::loop()
     _webApiSecurity.loop();
     _webApiSysstatus.loop();
     _webApiWebapp.loop();
+    _webApiWsConsole.loop();
     _webApiWsLive.loop();
 }
 
@@ -73,6 +78,16 @@ bool WebApiClass::checkCredentials(AsyncWebServerRequest* request)
     request->send(r);
 
     return false;
+}
+
+bool WebApiClass::checkCredentialsReadonly(AsyncWebServerRequest* request)
+{
+    CONFIG_T& config = Configuration.get();
+    if (config.Security_AllowReadonly) {
+        return true;
+    } else {
+        return checkCredentials(request);
+    }
 }
 
 WebApiClass WebApi;

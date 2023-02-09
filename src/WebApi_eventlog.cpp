@@ -3,9 +3,9 @@
  * Copyright (C) 2022 Thomas Basler and others
  */
 #include "WebApi_eventlog.h"
-#include "ArduinoJson.h"
-#include "AsyncJson.h"
-#include "Hoymiles.h"
+#include "WebApi.h"
+#include <AsyncJson.h>
+#include <Hoymiles.h>
 
 void WebApiEventlogClass::init(AsyncWebServer* server)
 {
@@ -22,6 +22,10 @@ void WebApiEventlogClass::loop()
 
 void WebApiEventlogClass::onEventlogStatus(AsyncWebServerRequest* request)
 {
+    if (!WebApi.checkCredentialsReadonly(request)) {
+        return;
+    }
+
     AsyncJsonResponse* response = new AsyncJsonResponse(false, 2048);
     JsonObject root = response->getRoot();
 

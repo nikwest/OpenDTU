@@ -3,9 +3,9 @@
  * Copyright (C) 2022 Thomas Basler and others
  */
 #include "WebApi_devinfo.h"
-#include "ArduinoJson.h"
-#include "AsyncJson.h"
-#include "Hoymiles.h"
+#include "WebApi.h"
+#include <AsyncJson.h>
+#include <Hoymiles.h>
 #include <ctime>
 
 void WebApiDevInfoClass::init(AsyncWebServer* server)
@@ -23,6 +23,10 @@ void WebApiDevInfoClass::loop()
 
 void WebApiDevInfoClass::onDevInfoStatus(AsyncWebServerRequest* request)
 {
+    if (!WebApi.checkCredentialsReadonly(request)) {
+        return;
+    }
+
     AsyncJsonResponse* response = new AsyncJsonResponse();
     JsonObject root = response->getRoot();
 
